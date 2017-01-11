@@ -5,6 +5,7 @@
 
 Welcome to Scorer Python SDK's documentation!
 =============================================
+This is the documentation page of Scorer Pytnon SDK.
 
 .. toctree::
    :maxdepth: 4
