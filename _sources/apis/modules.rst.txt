@@ -1,7 +1,0 @@
-scorer
-======
-
-.. toctree::
-   :maxdepth: 4
-
-   scorer

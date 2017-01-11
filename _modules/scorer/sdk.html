@@ -1,0 +1,535 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>scorer.sdk &#8212; Scorer Python SDK 0.4.0 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.4.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for scorer.sdk</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;Scorer.py  Main library code of Scorer SDK for python</span>
+<span class="sd">This is a main socuce code of Scorer SDK for python.&lt;br&gt;</span>
+<span class="sd">It collaborate with Scorer for Raspberry Pi.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">zmq</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="k">import</span> <span class="n">datetime</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+
+<span class="c1">#ZMQ scoket String</span>
+<span class="n">img_sock</span>      <span class="o">=</span> <span class="s2">&quot;ipc://@/scorer/frame_grabber-video0&quot;</span>
+<span class="n">log_sock</span>      <span class="o">=</span> <span class="s2">&quot;ipc://@/scorer/logger-marker&quot;</span>
+<span class="n">sdk_sock</span>      <span class="o">=</span> <span class="s2">&quot;ipc://@/scorer/logger-sdk&quot;</span>
+<span class="n">web_sock1</span>      <span class="o">=</span> <span class="s2">&quot;ipc://@/scorer/web-sdk1&quot;</span>
+<span class="n">web_sock2</span>      <span class="o">=</span> <span class="s2">&quot;ipc://@/scorer/web-sdk2&quot;</span>
+<span class="n">web_sock3</span>      <span class="o">=</span> <span class="s2">&quot;ipc://@/scorer/web-sdk3&quot;</span>
+<span class="n">web_sock4</span>      <span class="o">=</span> <span class="s2">&quot;ipc://@/scorer/web-sdk4&quot;</span>
+<span class="n">MAX_WEB_SCOCK</span>  <span class="o">=</span> <span class="mi">4</span>
+
+<span class="n">SCORER_DEV_CONFIG</span> <span class="o">=</span> <span class="s2">&quot;/opt/scorer/home/dev/lib/CONFIG&quot;</span>
+<span class="n">USER_ROI_DATA</span> <span class="o">=</span> <span class="s2">&quot;USER_ROI_DATA=&quot;</span>
+
+<div class="viewcode-block" id="Frame"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame">[docs]</a><span class="k">class</span> <span class="nc">Frame</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Frame class. This class handles frame and date data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">mat_type</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initialize the instance</span>
+
+<span class="sd">        :param timestamp: timestamp of the frame</span>
+<span class="sd">        :param format: image format</span>
+<span class="sd">        :param row: row of the images</span>
+<span class="sd">        :param col: col of the images</span>
+<span class="sd">        :param mat_type: mat type of the images</span>
+<span class="sd">        :param data: image data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">my_time</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;!q&#39;</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">my_row</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;!i&#39;</span><span class="p">,</span> <span class="n">rows</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">my_col</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;!i&#39;</span><span class="p">,</span> <span class="n">cols</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">my_type</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;!i&#39;</span><span class="p">,</span> <span class="n">mat_type</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">my_row</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="bp">self</span><span class="o">.</span><span class="n">my_col</span><span class="p">[</span><span class="mi">0</span><span class="p">]));</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_format</span><span class="o">=</span><span class="nb">format</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Frame.get_image"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_image">[docs]</a>    <span class="k">def</span> <span class="nf">get_image</span><span class="p">():</span>
+        <span class="sd">&quot;&quot;&quot;Get raw image data from camera</span>
+
+<span class="sd">        :return: raw image data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">image</span></div>
+
+<div class="viewcode-block" id="Frame.get_bgr"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_bgr">[docs]</a>    <span class="k">def</span> <span class="nf">get_bgr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Get bgr image data</span>
+
+<span class="sd">        :return: bgr image data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_format</span> <span class="o">==</span> <span class="s2">&quot;I420&quot;</span><span class="p">:</span>
+            <span class="n">bgr</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_YUV2BGR_I420</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_format</span> <span class="o">==</span> <span class="s2">&quot;BGR&quot;</span><span class="p">:</span>
+            <span class="n">bgr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_format</span> <span class="o">==</span> <span class="s2">&quot;RGBA&quot;</span><span class="p">:</span>
+            <span class="n">bgr</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_RGBA2BGR</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;format is incorrect&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">bgr</span></div>
+
+<div class="viewcode-block" id="Frame.get_gray"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_gray">[docs]</a>    <span class="k">def</span> <span class="nf">get_gray</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get gray image data</span>
+
+<span class="sd">        :return: gray image data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_format</span> <span class="o">==</span> <span class="s2">&quot;I420&quot;</span><span class="p">:</span>
+            <span class="n">gray</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_YUV2GRAY_I420</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_format</span> <span class="o">==</span> <span class="s2">&quot;BGR&quot;</span><span class="p">:</span>
+            <span class="n">gray</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_format</span> <span class="o">==</span> <span class="s2">&quot;RGBA&quot;</span><span class="p">:</span>
+            <span class="n">gray</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_RGBA2BGR</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;format is incorrect&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gray</span></div>
+
+<div class="viewcode-block" id="Frame.get_col"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_col">[docs]</a>    <span class="k">def</span> <span class="nf">get_col</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get column number</span>
+
+<span class="sd">        :return: column number of this image</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">my_col</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Frame.get_row"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_row">[docs]</a>    <span class="k">def</span> <span class="nf">get_row</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get row number</span>
+
+<span class="sd">        :return: row number of this image</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">my_row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Frame.get_frame_time"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_frame_time">[docs]</a>    <span class="k">def</span> <span class="nf">get_frame_time</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get frame timestamp</span>
+
+<span class="sd">        :return: timestamp of this image</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">my_time</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+ 
+<div class="viewcode-block" id="Frame.get_frame_datetime"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_frame_datetime">[docs]</a>    <span class="k">def</span> <span class="nf">get_frame_datetime</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get frame datetime</span>
+
+<span class="sd">        :return: datetime</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">epoch_time</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">my_time</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="mi">1000000</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">datetime</span><span class="p">(</span><span class="o">*</span><span class="n">time</span><span class="o">.</span><span class="n">localtime</span><span class="p">(</span><span class="n">epoch_time</span><span class="p">)[:</span><span class="mi">6</span><span class="p">])</span></div>
+ 
+<div class="viewcode-block" id="Frame.get_frame_msec"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Frame.get_frame_msec">[docs]</a>    <span class="k">def</span> <span class="nf">get_frame_msec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get frame msec</span>
+
+<span class="sd">        :return: msec</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">epoch_msec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">my_time</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">%</span><span class="mi">1000000</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">epoch_msec</span></div></div>
+     
+<div class="viewcode-block" id="Scorer"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer">[docs]</a><span class="k">class</span> <span class="nc">Scorer</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot; Scorer SDK main class.  This is the main class of Scorer SDK</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">roi_file</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initialize the instance</span>
+
+<span class="sd">        :param task: Task name</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
+        <span class="c1">#</span>
+        <span class="k">if</span> <span class="n">task</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;task type is incorrect&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">task</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;task has length 0&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="n">task</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUB</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span><span class="o">.</span><span class="n">setsockopt_string</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUBSCRIBE</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">RCVHWM</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">img_sock</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_sock</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_sock</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SNDHWM</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_sock</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">log_sock</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sdk_sock</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sdk_sock</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SNDHWM</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sdk_sock</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">sdk_sock</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">poller</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">Poller</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">poller</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span><span class="p">,</span> <span class="n">zmq</span><span class="o">.</span><span class="n">POLLIN</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock1</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock1</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SNDHWM</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock2</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock2</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SNDHWM</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock3</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock3</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SNDHWM</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock4</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock4</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SNDHWM</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock1_bind_set</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock2_bind_set</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock3_bind_set</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">web_sock4_bind_set</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">config_file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">SCORER_DEV_CONFIG</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;ERROR:Can not Open Scorer Configuration file.&quot;</span><span class="p">)</span>
+            <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">config_file</span><span class="o">.</span><span class="n">readlines</span><span class="p">():</span>
+            <span class="n">line</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s1">r&#39;#.*$&#39;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+            <span class="n">matchOB</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">USER_ROI_DATA</span> <span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">matchOB</span> <span class="o">==</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">name</span><span class="p">,</span> <span class="n">roi_fname</span> <span class="o">=</span> <span class="n">line</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;=&#39;</span><span class="p">)</span>
+            <span class="k">break</span>
+
+        <span class="k">if</span> <span class="n">roi_file</span><span class="o">!=</span><span class="s2">&quot;default&quot;</span><span class="p">:</span>
+            <span class="n">roi_fname</span><span class="o">=</span><span class="n">roi_file</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">user_roi_file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">roi_fname</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;ERROR:Can not Open ROI Configuration file.&quot;</span><span class="p">)</span>
+            <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">user_roi_file</span><span class="p">)</span>
+
+        <span class="n">keyList</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keyList</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;objects&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">roiObjects</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+            <span class="k">break</span>
+
+        <span class="n">roiObjects_n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">roiObjects</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">circle_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">line_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">all_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">roi</span> <span class="ow">in</span> <span class="n">roiObjects</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">my_type</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="n">my_type</span> <span class="o">==</span> <span class="s2">&quot;circle&quot;</span><span class="p">:</span>
+                <span class="nb">id</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+                <span class="n">x</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="s2">&quot;x&quot;</span><span class="p">]</span>
+                <span class="n">y</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+                <span class="n">radius</span> <span class="o">=</span>  <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;radius&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">circle_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">id</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">,</span> <span class="s2">&quot;radius&quot;</span><span class="p">:</span> <span class="n">radius</span> <span class="p">})</span>
+            <span class="k">elif</span>  <span class="n">my_type</span> <span class="o">==</span> <span class="s2">&quot;line&quot;</span><span class="p">:</span>
+                <span class="nb">id</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+                <span class="n">x1</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;x&quot;</span><span class="p">]</span>
+                <span class="n">y1</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+                <span class="n">x2</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;x&quot;</span><span class="p">]</span>
+                <span class="n">y2</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">line_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">id</span><span class="p">,</span> <span class="s2">&quot;x1&quot;</span><span class="p">:</span> <span class="n">x1</span><span class="p">,</span> <span class="s2">&quot;y1&quot;</span><span class="p">:</span> <span class="n">y1</span><span class="p">,</span> <span class="s2">&quot;x2&quot;</span><span class="p">:</span> <span class="n">x2</span><span class="p">,</span> <span class="s2">&quot;y2&quot;</span><span class="p">:</span> <span class="n">y2</span> <span class="p">})</span>
+            <span class="k">elif</span>  <span class="n">my_type</span> <span class="o">==</span> <span class="s2">&quot;rect&quot;</span><span class="p">:</span>
+                <span class="nb">id</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+                <span class="n">x1</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;x&quot;</span><span class="p">]</span>
+                <span class="n">y1</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+                <span class="n">x2</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;x&quot;</span><span class="p">]</span>
+                <span class="n">y2</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">id</span><span class="p">,</span> <span class="s2">&quot;x1&quot;</span><span class="p">:</span> <span class="n">x1</span><span class="p">,</span> <span class="s2">&quot;y1&quot;</span><span class="p">:</span> <span class="n">y1</span><span class="p">,</span> <span class="s2">&quot;x2&quot;</span><span class="p">:</span> <span class="n">x2</span><span class="p">,</span> <span class="s2">&quot;y2&quot;</span><span class="p">:</span> <span class="n">y2</span> <span class="p">})</span>
+            <span class="k">elif</span>  <span class="n">my_type</span> <span class="o">==</span> <span class="s2">&quot;path&quot;</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+        <span class="n">config_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="n">user_roi_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="Scorer.get_roi_circle"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_circle">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_circle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Circle data</span>
+
+<span class="sd">        :return: List of ROI data for Circle</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">circle_list</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_circle_len"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_circle_len">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_circle_len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Circle data</span>
+
+<span class="sd">        :return: Length of ROI data for Circle</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">circle_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_circle_by_index"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_circle_by_index">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_circle_by_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Circle data by index</span>
+
+<span class="sd">        :param index: index</span>
+<span class="sd">        :return: ROI data of Circle by index (x y radius)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">circle_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;x&quot;</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">circle_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;y&quot;</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">circle_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;radius&quot;</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_rect"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_rect">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_rect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Rectangle data</span>
+
+<span class="sd">        :return: List of ROI data for Rectangle</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_rect_len"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_rect_len">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_rect_len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Rectangle data length</span>
+
+<span class="sd">        :return: Length of ROI data for Rectangle</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_rect_by_index"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_rect_by_index">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_rect_by_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Rectangle data by index</span>
+
+<span class="sd">        :param int index: index</span>
+<span class="sd">        :return: ROI data of Rectangle by index (x1 y1 x2 y2)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;x1&quot;</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;y1&quot;</span><span class="p">]),</span> \
+               <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;x2&quot;</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rect_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;y2&quot;</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_line"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_line">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_line</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Line data</span>
+
+<span class="sd">        :return: List of ROI data for Line</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">line_list</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_line_len"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_line_len">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_line_len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Line data length</span>
+
+<span class="sd">        :return: Length of ROI data for Line</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">line_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Scorer.get_roi_line_by_index"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_roi_line_by_index">[docs]</a>    <span class="k">def</span> <span class="nf">get_roi_line_by_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get ROI Line data by index</span>
+
+<span class="sd">        :param index: index</span>
+<span class="sd">        :return: ROI data of Line by index (x1 y1 x2 y2)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">line_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;x1&quot;</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">line_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;y1&quot;</span><span class="p">]),</span> \
+               <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">line_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;x2&quot;</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">line_list</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;y2&quot;</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="Scorer.poll"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.poll">[docs]</a>    <span class="k">def</span> <span class="nf">poll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Poller for zmq</span>
+
+<span class="sd">        :param timeout: timeout(s)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">events</span> <span class="o">=</span>  <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">poller</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">events</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="Scorer.get_frame"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.get_frame">[docs]</a>    <span class="k">def</span> <span class="nf">get_frame</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get frame data from zmq</span>
+
+<span class="sd">        :param block_type: block_type</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">socks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">events</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span> <span class="ow">in</span> <span class="n">socks</span> <span class="ow">and</span> <span class="n">socks</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span><span class="p">]</span> <span class="o">==</span> <span class="n">zmq</span><span class="o">.</span><span class="n">POLLIN</span><span class="p">:</span>
+                    <span class="n">topic</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">my_type</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">mat_type</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> \
+                                             <span class="bp">self</span><span class="o">.</span><span class="n">img_sock</span><span class="o">.</span><span class="n">recv_multipart</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">NOBLOCK</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">frame</span> <span class="o">=</span> <span class="n">Frame</span><span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">mat_type</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span>            </div>
+
+<div class="viewcode-block" id="Scorer.web_show"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.web_show">[docs]</a>    <span class="k">def</span> <span class="nf">web_show</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cvdata</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Send the opencv image data to Flask web server</span>
+
+<span class="sd">        :param cvdata: Opencv image data</span>
+<span class="sd">        :param index: Web server index</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">serialized</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">cvdata</span><span class="p">,</span> <span class="n">protocol</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">web_sock1_bind_set</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock1_bind_set</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock1</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">web_sock1</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">web_sock1</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">serialized</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">web_sock2_bind_set</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock2_bind_set</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock2</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">web_sock2</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">web_sock2</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">serialized</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">web_sock3_bind_set</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock3_bind_set</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock3</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">web_sock3</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">web_sock3</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">serialized</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">web_sock4_bind_set</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock4_bind_set</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">web_sock4</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">web_sock4</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">web_sock4</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">serialized</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;the index[&quot;</span> <span class="o">+</span> <span class="n">index</span> <span class="o">+</span> <span class="s2">&quot;] is invalid&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="Scorer.upload"><a class="viewcode-back" href="../../scorer.html#scorer.sdk.Scorer.upload">[docs]</a>    <span class="k">def</span> <span class="nf">upload</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">log_dictionary</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">log_list</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">log_str</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">images</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;upload Upload snapshots image and log</span>
+
+<span class="sd">        :param log_dictionary: Dictionary</span>
+<span class="sd">        :param log_list: List</span>
+<span class="sd">        :param log_str: String</span>
+<span class="sd">        :param images: list of numpy images</span>
+<span class="sd">        :return: upload success then retun True otherwise return False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">result_str</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+
+        <span class="c1"># Syntax check</span>
+        <span class="k">if</span> <span class="n">log_dictionary</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">log_dictionary</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+             <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;log_dictionary is not a dictionary&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">False</span>
+     
+        <span class="k">if</span> <span class="n">log_list</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">log_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+             <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;log_list is not a list&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">False</span>
+     
+        <span class="k">if</span> <span class="n">log_str</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">log_str</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+             <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;log_str is not a String&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="n">images</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+             <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;images is not a list&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="n">images</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">6</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;images list len must be less than 5&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span><span class="p">;</span>
+     
+        <span class="c1"># Combine the log payload text</span>
+        <span class="k">if</span> <span class="n">log_dictionary</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result_str</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">log_dictionary</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">log_list</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result_str</span><span class="o">=</span><span class="n">result_str</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">log_list</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">log_str</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result_str</span><span class="o">=</span><span class="n">result_str</span> <span class="o">+</span> <span class="s2">&quot;(&quot;</span> <span class="o">+</span> <span class="n">log_str</span> <span class="o">+</span> <span class="s2">&quot;)&quot;</span>
+
+        <span class="n">result_str</span> <span class="o">=</span> <span class="n">result_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">result_str</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">result_str</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\&quot;\&quot;</span><span class="s2">&quot;</span>
+
+        <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;Log&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+        <span class="nb">id</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+
+        <span class="n">images_n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="p">)</span> <span class="k">if</span> <span class="n">images</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[</span> <span class="n">name</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">),</span> <span class="n">result_str</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span> <span class="p">[</span><span class="n">images_n</span><span class="p">]</span> <span class="p">)</span> <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sdk_sock</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">zmq</span><span class="o">.</span><span class="n">SNDMORE</span> <span class="p">)</span>
+
+        <span class="c1"># If no images, just send log payload</span>
+        <span class="k">if</span> <span class="n">images_n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sdk_sock</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="c1"># Send images and log payload</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span> <span class="n">images_n</span> <span class="p">):</span>
+            <span class="n">height</span><span class="p">,</span> <span class="n">width</span> <span class="o">=</span> <span class="n">images</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+            <span class="n">ndim</span> <span class="o">=</span> <span class="n">images</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span>
+            <span class="n">data_info</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span> <span class="p">[</span><span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">ndim</span><span class="p">]</span> <span class="p">);</span>
+
+            <span class="n">data</span> <span class="o">=</span> <span class="p">[</span> <span class="n">data_info</span><span class="p">,</span> <span class="n">images</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">data</span> <span class="p">]</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="p">)</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sdk_sock</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sdk_sock</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">zmq</span><span class="o">.</span><span class="n">SNDMORE</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="kc">True</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Future Standard Co.,LTD.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.5.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.9</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
